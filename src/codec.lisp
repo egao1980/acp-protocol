@@ -83,30 +83,158 @@
                               :error (make-acp 'acp-error-object
                                                :code code :message message :data data)))
 
+;;; --- objects --------------------------------------------------------------------
+
+(defun %json-object (&rest kvs)
+  (let ((h (make-hash-table :test 'equal)))
+    (loop for (k v) on kvs by #'cddr do (setf (gethash k h) v))
+    h))
+
+(defun %issue-text (issue)
+  (format nil "~:[$~;~:*~{~A~^.~}~]: ~A"
+          (stack-schema:schema-issue-path issue)
+          (stack-schema:schema-issue-message issue)))
+
+(defun %invalid-params (cause issues)
+  "An ACP-INVALID-PARAMS (not signalled) whose DATA carries ISSUES (strings)."
+  (make-condition 'acp-invalid-params
+                  :cause cause
+                  :data (%json-object "issues" (coerce issues 'vector))))
+
 (defun parse-acp-object (class source)
-  (declare (ignore class source))
-  (%acp0-pending 'parse-acp-object))
+  (check-type class symbol)
+  (let ((table (if (stringp source)
+                   (handler-case (json-protocol:decode source)
+                     (error (e) (error (%invalid-params e (list (princ-to-string e))))))
+                   source)))
+    (unless (hash-table-p table)
+      (error (%invalid-params nil (list (format nil "$: expected a JSON object, got ~A"
+                                                (type-of table))))))
+    (handler-case (stack-schema:parse class table)
+      (stack-schema:schema-validation-error (e)
+        (error (%invalid-params
+                e (or (mapcar #'%issue-text (stack-schema:schema-validation-error-issues e))
+                      (list (princ-to-string e))))))
+      ((or stack-schema:schema-error type-error) (e)
+        (error (%invalid-params e (list (princ-to-string e))))))))
+
+(defun %schema-object-p (object)
+  (and (typep object 'standard-object)
+       (stack-schema:schema-class-p (class-of object))))
 
 (defun acp-object-table (object)
-  (declare (ignore object))
-  (%acp0-pending 'acp-object-table))
+  (if (hash-table-p object)
+      object
+      (stack-schema:dump object)))
+
+(defun %wire (value)
+  "VALUE as a JSON value: a model object dumped, anything else as is."
+  (if (%schema-object-p value) (stack-schema:dump value) value))
 
 (defun encode-acp-object (object)
-  (declare (ignore object))
-  (%acp0-pending 'encode-acp-object))
+  (json-protocol:encode (acp-object-table object)))
+
+;;; --- envelopes ------------------------------------------------------------------
+
+(defun %params-object (params)
+  "Absent params (NIL, or the `[]` rpc-protocol-json writes for NIL) → {}."
+  (if (or (null params)
+          (and (vectorp params) (not (stringp params)) (zerop (length params))))
+      (make-hash-table :test 'equal)
+      params))
+
+(defun %envelope (source)
+  "Phase 1: SOURCE (text or decoded table) → (values TABLE KIND PROBLEM).
+KIND is :request :notification :response :error; PROBLEM is NIL, :parse (not
+JSON) or :invalid (not a JSON-RPC 2.0 message). Never signals."
+  (let ((table (if (hash-table-p source)
+                   source
+                   (handler-case (rpc-protocol:decode-message
+                                  source :codec rpc-protocol-json:*jsonrpc-codec*)
+                     (error () (return-from %envelope (values nil nil :parse)))))))
+    (unless (and (hash-table-p table) (equal "2.0" (gethash "jsonrpc" table)))
+      (return-from %envelope (values nil nil :invalid)))
+    (flet ((has (key) (nth-value 1 (gethash key table))))
+      (let ((kind (cond ((stringp (gethash "method" table))
+                         (if (has "id") :request :notification))
+                        ((and (has "id") (has "result")) :response)
+                        ((and (has "id") (hash-table-p (gethash "error" table))) :error))))
+        (if kind
+            (values table kind nil)
+            (values nil nil :invalid))))))
+
+(defun %realize (table kind method)
+  "Phase 2: an envelope TABLE of KIND → ACP-MESSAGE, payloads parsed."
+  (let ((id (gethash "id" table)))
+    (ecase kind
+      ((:request :notification)
+       (let* ((name (gethash "method" table))
+              (row (acp-method-row name))
+              (params (gethash "params" table)))
+         (make-instance 'acp-message
+                        :kind kind :id (and (eq kind :request) id) :method name
+                        :params (if row
+                                    (parse-acp-object (fourth row) (%params-object params))
+                                    params)
+                        :known-p (and row t))))
+      (:response
+       (let* ((class (and method (acp-method-response-class method)))
+              (result (gethash "result" table)))
+         (make-instance 'acp-message
+                        :kind :response :id id :method method
+                        :result (if class (parse-acp-object class result) result)
+                        :known-p (and class t))))
+      (:error
+       (make-instance 'acp-message
+                      :kind :error :id id :method method
+                      :error (parse-acp-object 'acp-error-object (gethash "error" table))
+                      :known-p t)))))
 
 (defun decode-acp-message (source &key method)
-  (declare (ignore source method))
-  (%acp0-pending 'decode-acp-message))
+  (multiple-value-bind (table kind problem) (%envelope source)
+    (ecase problem
+      (:parse (error 'acp-invalid-request :message "Parse error: not JSON"))
+      (:invalid (error 'acp-invalid-request :message "Not a JSON-RPC 2.0 message"))
+      ((nil) (%realize table kind method)))))
 
 (defun encode-acp-message (message)
-  (declare (ignore message))
-  (%acp0-pending 'encode-acp-message))
+  (check-type message acp-message)
+  (let ((codec rpc-protocol-json:*jsonrpc-codec*)
+        (id (acp-message-id message)))
+    (ecase (acp-message-kind message)
+      (:request
+       (rpc-protocol:encode-request (acp-message-method message)
+                                    (%wire (acp-message-params message))
+                                    :id id :codec codec))
+      (:notification
+       (rpc-protocol:encode-notification (acp-message-method message)
+                                         (%wire (acp-message-params message))
+                                         :codec codec))
+      (:response
+       (rpc-protocol:encode-response (%wire (acp-message-result message))
+                                     :id (or id :null) :codec codec))
+      (:error
+       (let ((e (acp-message-error message)))
+         (rpc-protocol:encode-error-response
+          (code e) (message e)
+          :id (or id :null)
+          :data (and (slot-boundp e 'data) (data e))
+          :codec codec))))))
+
+;;; --- error mapping ----------------------------------------------------------------
 
 (defun acp-error-for (condition)
-  (declare (ignore condition))
-  (%acp0-pending 'acp-error-for))
+  (typecase condition
+    (acp-error (values (acp-error-code condition)
+                       (acp-error-message condition)
+                       (acp-error-data condition)))
+    (rpc-protocol:rpc-error (values (rpc-protocol:rpc-error-code condition)
+                                    (or (rpc-protocol:rpc-error-message condition)
+                                        (princ-to-string condition))
+                                    (rpc-protocol:rpc-error-data condition)))
+    (t (values -32603 (princ-to-string condition) nil))))
 
 (defun acp-condition-for (code message &optional data)
-  (declare (ignore code message data))
-  (%acp0-pending 'acp-condition-for))
+  (check-type code integer)
+  (make-condition (or (car (rassoc code +acp-error-codes+)) 'acp-error)
+                  :code code :message message :data data))

@@ -177,21 +177,201 @@ sending through TRANSPORT. Its REMOTE is a proxy of the other role."
           (make-instance (if (eq role :agent) 'remote-client 'remote-agent) :connection c))
     c))
 
+;;; --- incoming side ---------------------------------------------------------------
+
+(defun %slot-or-nil (object slot)
+  "SLOT of OBJECT, or NIL when unbound or JSON null."
+  (when (and (%schema-object-p object) (slot-boundp object slot))
+    (let ((v (slot-value object slot)))
+      (unless (eq v :null) v))))
+
+(defun %cancel-count (connection session-id)
+  (bt2:with-lock-held ((acp-connection-lock connection))
+    (gethash session-id (acp-connection-cancel-counts connection) 0)))
+
+(defun %invoke-local (connection method gf local object)
+  "(GF LOCAL OBJECT) with the per-method rules 1.* of the dispatcher."
+  (let ((role (acp-connection-role connection)))
+    (cond
+      ((and (eq role :agent) (string= method "initialize"))
+       (setf (acp-connection-client-capabilities connection)
+             (%slot-or-nil object 'client-capabilities)
+             (acp-connection-client-info connection) (%slot-or-nil object 'client-info))
+       (let ((response (funcall gf local object)))
+         (when (and (%schema-object-p response)
+                    (not (slot-boundp response 'protocol-version)))
+           (setf (protocol-version response) +acp-protocol-version+))
+         (setf (acp-connection-protocol-version connection)
+               (%slot-or-nil response 'protocol-version)
+               (acp-connection-agent-capabilities connection)
+               (%slot-or-nil response 'agent-capabilities)
+               (acp-connection-agent-info connection) (%slot-or-nil response 'agent-info)
+               (acp-connection-initialized-p connection) t)
+         response))
+      ((string= method "session/prompt")
+       (handler-case (funcall gf local object)
+         (acp-request-cancelled ()
+           (make-acp 'prompt-response :stop-reason "cancelled"))))
+      ((and (eq role :client) (string= method "session/request_permission"))
+       (let* ((session-id (session-id object))
+              (before (%cancel-count connection session-id))
+              (response (funcall gf local object)))
+         (if (> (%cancel-count connection session-id) before)
+             (make-acp 'request-permission-response
+                       :outcome (make-acp 'cancelled-permission-outcome))
+             response)))
+      (t (funcall gf local object)))))
+
+(defun %dispatch (connection method row kind params)
+  "Rules 1–4 of ACP-CONNECTION-HANDLER → the JSON result (requests) or NIL."
+  (let ((role (acp-connection-role connection))
+        (local (acp-connection-local connection)))
+    (cond
+      ((and (eq role :agent)
+            (not (acp-connection-initialized-p connection))
+            (not (equal method "initialize")))
+       (when (eq kind :request)
+         (error 'acp-invalid-request
+                :message (format nil "Request before initialize: ~A" method))))
+      ((and row (member (second row) (list role :both)))
+       (let* ((object (parse-acp-object (fourth row) (%params-object params)))
+              (value (%invoke-local connection method (sixth row) local object)))
+         (when (eq kind :request)
+           (if value (acp-object-table value) (make-hash-table :test 'equal)))))
+      ((acp-extension-method-p method)
+       (if (eq kind :request)
+           (acp-ext-method local method params)
+           (acp-ext-notification local method params)))
+      ((eq kind :request) (%not-found method)))))
+
 (defun acp-connection-handler (connection)
-  (declare (ignore connection))
-  (%acp0-pending 'acp-connection-handler))
+  (check-type connection acp-connection)
+  (lambda (method params)
+    (let* ((*acp-connection* connection)
+           (*acp-remote* (acp-connection-remote connection))
+           (row (and (stringp method) (acp-method-row method)))
+           (kind (if row (third row) *acp-incoming-kind*)))
+      (if (eq kind :notification)
+          (handler-case (progn (%dispatch connection method row :notification params) nil)
+            (error () nil))
+          ;; Innermost handler: outer HANDLER-BINDs (the caller's, live through the
+          ;; synchronous loopback) never see this side's own errors. ERROR only, so
+          ;; ACP-PERMISSION-REQUIRED passes through.
+          (handler-case (%dispatch connection method row :request params)
+            (error (e)
+              (multiple-value-bind (code message data) (acp-error-for e)
+                (error 'rpc-protocol:rpc-error :code code :message message :data data))))))))
+
+(defun %answer (handler id method params)
+  "Call HANDLER for the request METHOD / PARAMS → the JSON-RPC answer text
+with ID: the result, the handler's RPC-ERROR, or -32603 for any other error."
+  (let ((codec rpc-protocol-json:*jsonrpc-codec*)
+        (*acp-incoming-kind* :request))
+    (handler-case
+        (rpc-protocol:encode-response (funcall handler method params) :id id :codec codec)
+      (rpc-protocol:rpc-error (e)
+        (rpc-protocol:encode-error-response
+         (rpc-protocol:rpc-error-code e)
+         (or (rpc-protocol:rpc-error-message e) (princ-to-string e))
+         :id id :data (rpc-protocol:rpc-error-data e) :codec codec))
+      (error (e)
+        (rpc-protocol:encode-error-response rpc-protocol:+internal-error+ (princ-to-string e)
+                                            :id id :codec codec)))))
+
+(defun %deliver-notification (handler method params)
+  "Call HANDLER for the notification METHOD / PARAMS; errors are dropped."
+  (let ((*acp-incoming-kind* :notification))
+    (handler-case (funcall handler method params)
+      (error () nil))
+    nil))
 
 (defun acp-handle-message (connection source)
-  (declare (ignore connection source))
-  (%acp0-pending 'acp-handle-message))
+  (check-type connection acp-connection)
+  (let ((codec rpc-protocol-json:*jsonrpc-codec*))
+    (multiple-value-bind (table kind problem) (%envelope source)
+      (case problem
+        (:parse
+         (rpc-protocol:encode-error-response rpc-protocol:+parse-error+ "Parse error"
+                                             :id :null :codec codec))
+        (:invalid
+         (rpc-protocol:encode-error-response rpc-protocol:+invalid-request+ "Invalid request"
+                                             :id :null :codec codec))
+        (t
+         (let ((handler (acp-connection-handler connection))
+               (method (gethash "method" table))
+               (params (gethash "params" table)))
+           (case kind
+             (:request (%answer handler (gethash "id" table) method params))
+             (:notification (%deliver-notification handler method params))
+             ;; responses / errors are answers to our own calls: not ours to handle here
+             (t nil))))))))
+
+;;; --- calling side ----------------------------------------------------------------
+
+(defun %check-capability (remote method)
+  "Signal ACP-UNSUPPORTED when METHOD is gated on a capability the initialized
+peer did not advertise."
+  (let* ((connection (remote-connection remote))
+         (feature (acp-method-capability method)))
+    (when (and feature (acp-connection-initialized-p connection))
+      (unless (etypecase remote
+                (remote-agent (agent-supports-p
+                               (acp-connection-agent-capabilities connection) feature))
+                (remote-client (client-supports-p
+                                (acp-connection-client-capabilities connection) feature)))
+        (error 'acp-unsupported
+               :method method :feature feature
+               :message (format nil "Capability ~(~A~) not advertised by the peer" feature))))))
+
+(defun %remote-request (remote method params &key timeout (parse #'identity))
+  "RPC-CALL METHOD on REMOTE's transport; the result through PARSE. An error
+answer is signalled as its ACP condition with RETRY / USE-VALUE."
+  (let ((transport (acp-connection-transport (remote-connection remote))))
+    (loop
+      (let ((condition
+              (handler-case
+                  (let ((result (rpc-protocol:rpc-call method params :timeout timeout
+                                                                     :transport transport)))
+                    (handler-case (return-from %remote-request (funcall parse result))
+                      (acp-error (e)
+                        (make-condition 'acp-internal-error
+                                        :cause e :data (acp-error-data e)
+                                        :message (format nil "Malformed ~A result: ~A"
+                                                         method e)))))
+                (rpc-protocol:rpc-error (e)
+                  (acp-condition-for (rpc-protocol:rpc-error-code e)
+                                     (or (rpc-protocol:rpc-error-message e) "")
+                                     (rpc-protocol:rpc-error-data e))))))
+        (restart-case (error condition)
+          (retry ()
+            :report (lambda (s) (format s "Send the ~A request again." method))
+            nil)
+          (use-value (value)
+            :report "Return a value instead of the response."
+            :interactive (lambda ()
+                           (format *query-io* "Value: ")
+                           (force-output *query-io*)
+                           (list (eval (read *query-io*))))
+            (return-from %remote-request value)))))))
 
 (defun remote-call (remote method request &key timeout)
-  (declare (ignore remote method request timeout))
-  (%acp0-pending 'remote-call))
+  (check-type remote remote-peer)
+  (check-type method string)
+  (%check-capability remote method)
+  (let ((class (acp-method-response-class method)))
+    (%remote-request remote method (acp-object-table request)
+                     :timeout timeout
+                     :parse (if class
+                                (lambda (result) (parse-acp-object class result))
+                                #'identity))))
 
 (defun remote-notify (remote method notification)
-  (declare (ignore remote method notification))
-  (%acp0-pending 'remote-notify))
+  (check-type remote remote-peer)
+  (check-type method string)
+  (%check-capability remote method)
+  (rpc-protocol:rpc-notify method (acp-object-table notification)
+                           :transport (acp-connection-transport (remote-connection remote)))
+  t)
 
 ;;; --- agent-side GFs (client → agent) ----------------------------------------
 
@@ -302,9 +482,42 @@ value are raw JSON. Default: ACP-METHOD-NOT-FOUND."))
   (declare (ignore notification))
   nil)
 
+(defun %permission-response (outcome)
+  (make-acp 'request-permission-response :outcome outcome))
+
 (defmethod acp-request-permission ((client acp-client) request)
-  (declare (ignore request))
-  (%acp0-pending 'acp-request-permission))
+  (let* ((options (coerce (options request) 'list))
+         (condition (make-condition 'acp-permission-required
+                                    :request request :connection *acp-connection*)))
+    (labels ((of-kind (kind) (find kind options :key #'kind :test #'equal))
+             (offered-p (kind) (and (of-kind kind) t))
+             (pick (option)
+               (%permission-response
+                (make-acp 'selected-permission-outcome :option-id (option-id option))))
+             (cancelled () (%permission-response (make-acp 'cancelled-permission-outcome))))
+      (or (restart-case (signal condition)
+            (select-permission-option (option-id)
+              :report "Answer with the option of this id."
+              (pick (or (find option-id options :key #'option-id :test #'equal)
+                        (error 'acp-invalid-params
+                               :message (format nil "Unknown permission option id ~S" option-id)
+                               :data (%json-object "optionId" option-id)))))
+            (allow-once ()
+              :report "Allow once." :test (lambda (c) (declare (ignore c)) (offered-p "allow_once"))
+              (pick (of-kind "allow_once")))
+            (allow-always ()
+              :report "Allow always." :test (lambda (c) (declare (ignore c)) (offered-p "allow_always"))
+              (pick (of-kind "allow_always")))
+            (reject-once ()
+              :report "Reject once." :test (lambda (c) (declare (ignore c)) (offered-p "reject_once"))
+              (pick (of-kind "reject_once")))
+            (reject-always ()
+              :report "Reject always." :test (lambda (c) (declare (ignore c)) (offered-p "reject_always"))
+              (pick (of-kind "reject_always")))
+            (cancel-permission ()
+              :report "Answer cancelled."
+              (cancelled)))
+          (cancelled)))))
 
 (defmethod acp-cancel-request ((peer acp-peer) notification)
   (declare (ignore notification))
@@ -356,31 +569,98 @@ value are raw JSON. Default: ACP-METHOD-NOT-FOUND."))
 ;;; check). They are :AROUND methods so the one-line proxies stay uniform.
 
 (defmethod acp-initialize :around ((peer remote-agent) request)
-  (declare (ignore request))
-  (%acp0-pending 'remote-agent-initialize))
+  (let* ((response (call-next-method))
+         (version (%slot-or-nil response 'protocol-version)))
+    (unless (eql version +acp-protocol-version+)
+      (error 'acp-version-mismatch
+             :version version
+             :message (format nil "The agent answered protocolVersion ~S; this build speaks ~D"
+                              version +acp-protocol-version+)))
+    (let ((connection (remote-connection peer))
+          (request (if (hash-table-p request)
+                       (parse-acp-object 'initialize-request request)
+                       request)))
+      (setf (acp-connection-client-capabilities connection)
+            (%slot-or-nil request 'client-capabilities)
+            (acp-connection-client-info connection) (%slot-or-nil request 'client-info)
+            (acp-connection-protocol-version connection) version
+            (acp-connection-agent-capabilities connection)
+            (%slot-or-nil response 'agent-capabilities)
+            (acp-connection-agent-info connection) (%slot-or-nil response 'agent-info)
+            (acp-connection-initialized-p connection) t))
+    response))
 
 (defmethod acp-cancel :around ((peer remote-agent) notification)
-  (declare (ignore notification))
-  (%acp0-pending 'remote-agent-cancel))
+  (let ((connection (remote-connection peer))
+        (session-id (if (hash-table-p notification)
+                        (gethash "sessionId" notification)
+                        (session-id notification))))
+    (bt2:with-lock-held ((acp-connection-lock connection))
+      (incf (gethash session-id (acp-connection-cancel-counts connection) 0)))
+    (call-next-method)))
 
 (defmethod acp-session-update :around ((peer remote-client) notification)
-  (declare (ignore notification))
-  (%acp0-pending 'remote-client-session-update))
+  (let ((connection (remote-connection peer))
+        (update (and (%schema-object-p notification) (%slot-or-nil notification 'update))))
+    (when (and (typep update '(or update-plan-update update-plan-removed))
+               (acp-connection-initialized-p connection)
+               (not (client-supports-p (acp-connection-client-capabilities connection)
+                                       :plan-operations)))
+      (error 'acp-unsupported
+             :method "session/update" :feature :plan-operations
+             :message "The client did not advertise plan operations; send the full plan"))
+    (call-next-method)))
 
 ;;; --- helpers -------------------------------------------------------------------
 
 (defun acp-send-update (remote session-id update)
-  (declare (ignore remote session-id update))
-  (%acp0-pending 'acp-send-update))
+  (check-type remote remote-client)
+  (acp-session-update remote (make-acp 'session-notification
+                                       :session-id session-id :update update))
+  t)
+
+(defun %permission-option (option)
+  (etypecase option
+    (permission-option option)
+    (list (destructuring-bind (option-id name kind) option
+            (make-acp 'permission-option :option-id option-id :name name :kind kind)))))
+
+(defun %kind-keyword (kind)
+  (intern (string-upcase (substitute #\- #\_ kind)) :keyword))
 
 (defun acp-ask-permission (remote session-id tool-call options)
-  (declare (ignore remote session-id tool-call options))
-  (%acp0-pending 'acp-ask-permission))
+  (check-type remote remote-client)
+  (let* ((options (mapcar #'%permission-option options))
+         (response (acp-request-permission
+                    remote (make-acp 'request-permission-request
+                                     :session-id session-id :tool-call tool-call
+                                     :options (coerce options 'vector))))
+         (outcome (outcome response)))
+    (etypecase outcome
+      (cancelled-permission-outcome (values :cancelled nil))
+      (selected-permission-outcome
+       (let* ((id (option-id outcome))
+              (option (find id options :key #'option-id :test #'equal)))
+         (unless option
+           (error 'acp-internal-error
+                  :message (format nil "The client chose option ~S, which was not offered" id)
+                  :data (%json-object "optionId" id)))
+         (values (%kind-keyword (kind option)) id))))))
+
+(defun %check-extension (method)
+  (unless (acp-extension-method-p method)
+    (error 'acp-invalid-request
+           :message (format nil "Not an extension method (must start with ~S): ~S"
+                            +acp-extension-prefix+ method))))
 
 (defun acp-call-ext (remote method params)
-  (declare (ignore remote method params))
-  (%acp0-pending 'acp-call-ext))
+  (check-type remote remote-peer)
+  (%check-extension method)
+  (%remote-request remote method (%wire params)))
 
 (defun acp-notify-ext (remote method params)
-  (declare (ignore remote method params))
-  (%acp0-pending 'acp-notify-ext))
+  (check-type remote remote-peer)
+  (%check-extension method)
+  (rpc-protocol:rpc-notify method (%wire params)
+                           :transport (acp-connection-transport (remote-connection remote)))
+  t)

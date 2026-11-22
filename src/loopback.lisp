@@ -47,25 +47,72 @@
         :documentation "A cons whose CAR is the shared log, newest first."))
   (:documentation "One direction of an in-memory ACP connection."))
 
+(defun %opposite (direction)
+  (ecase direction (:to-agent :to-client) (:to-client :to-agent)))
+
+(defun %log-line (transport direction text)
+  (push (cons direction text) (car (loopback-log transport)))
+  text)
+
+(defun %peer-handler (transport)
+  (or (loopback-peer-handler transport)
+      (error 'acp-internal-error
+             :message (format nil "Loopback ~(~A~) transport has no peer handler"
+                              (loopback-direction transport)))))
+
 (defmethod rpc-protocol:backend-rpc-call
     ((transport loopback-rpc-transport) method params &key timeout id)
-  (declare (ignore method params timeout id))
-  (%acp0-pending 'loopback-rpc-call))
+  (declare (ignore timeout))
+  (let* ((codec rpc-protocol-json:*jsonrpc-codec*)
+         (id (or id (incf (loopback-next-id transport))))
+         (handler (%peer-handler transport))
+         (text (%log-line transport (loopback-direction transport)
+                          (rpc-protocol:encode-request method params :id id :codec codec)))
+         ;; the receiving side: decode the line, answer it
+         (incoming (rpc-protocol:decode-message text :codec codec))
+         (answer (%log-line transport (%opposite (loopback-direction transport))
+                            (%answer handler (gethash "id" incoming)
+                                     (gethash "method" incoming)
+                                     (gethash "params" incoming))))
+         ;; the calling side: decode the answer
+         (reply (rpc-protocol:decode-message answer :codec codec)))
+    (multiple-value-bind (err errorp) (gethash "error" reply)
+      (if errorp
+          (error 'rpc-protocol:rpc-error :code (gethash "code" err)
+                                         :message (gethash "message" err)
+                                         :data (gethash "data" err))
+          (gethash "result" reply)))))
 
 (defmethod rpc-protocol:backend-rpc-notify
     ((transport loopback-rpc-transport) method params)
-  (declare (ignore method params))
-  (%acp0-pending 'loopback-rpc-notify))
+  (let* ((codec rpc-protocol-json:*jsonrpc-codec*)
+         (handler (%peer-handler transport))
+         (text (%log-line transport (loopback-direction transport)
+                          (rpc-protocol:encode-notification method params :codec codec)))
+         (incoming (rpc-protocol:decode-message text :codec codec)))
+    (%deliver-notification handler (gethash "method" incoming) (gethash "params" incoming))
+    t))
 
 (defmethod rpc-protocol:backend-rpc-serve
     ((transport loopback-rpc-transport) handler &key)
-  (declare (ignore handler))
-  (%acp0-pending 'loopback-rpc-serve))
+  (check-type handler function)
+  (setf (loopback-peer-handler transport) handler)
+  transport)
 
 (defun make-acp-loopback (agent client)
-  (declare (ignore agent client))
-  (%acp0-pending 'make-acp-loopback))
+  (check-type agent acp-agent)
+  (check-type client acp-client)
+  (let* ((log (list '()))
+         (to-agent (make-instance 'loopback-rpc-transport :direction :to-agent :log log))
+         (to-client (make-instance 'loopback-rpc-transport :direction :to-client :log log))
+         (agent-side (make-acp-connection :role :agent :local agent :transport to-client))
+         (client-side (make-acp-connection :role :client :local client :transport to-agent)))
+    (rpc-protocol:rpc-serve (acp-connection-handler agent-side) :transport to-agent)
+    (rpc-protocol:rpc-serve (acp-connection-handler client-side) :transport to-client)
+    (values (acp-connection-remote client-side) (acp-connection-remote agent-side))))
 
 (defun acp-loopback-log (remote)
-  (declare (ignore remote))
-  (%acp0-pending 'acp-loopback-log))
+  (check-type remote remote-peer)
+  (let ((transport (acp-connection-transport (remote-connection remote))))
+    (check-type transport loopback-rpc-transport)
+    (reverse (car (loopback-log transport)))))

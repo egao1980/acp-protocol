@@ -33,14 +33,72 @@
 ;;;   object of CAPS (any model object with a META slot); how extensions
 ;;;   advertise themselves ("com.example/workspace"). NIL NIL when absent.
 
+;;; Each feature is a path of wire keys into the dumped capabilities object,
+;;; with the test its final value must pass: :TRUE (JSON true) or :OBJECT
+;;; (a JSON object, `{}` = on). :ANY rows name other features.
+
+(defparameter +%client-feature-paths+
+  '((:read-text-file :true "fs" "readTextFile")
+    (:write-text-file :true "fs" "writeTextFile")
+    (:terminal :true "terminal")
+    (:auth-terminal :true "auth" "terminal")
+    (:plan-operations :object "plan")
+    (:subagents :object "subagents")
+    (:elicitation-form :object "elicitation" "form")
+    (:elicitation-url :object "elicitation" "url")
+    (:elicitation :any :elicitation-form :elicitation-url)
+    (:boolean-config-options :object "session" "configOptions" "boolean")
+    (:session-compaction :object "session" "compaction")
+    (:session-notices :object "session" "notices")))
+
+(defparameter +%agent-feature-paths+
+  '((:load-session :true "loadSession")
+    (:image :true "promptCapabilities" "image")
+    (:audio :true "promptCapabilities" "audio")
+    (:embedded-context :true "promptCapabilities" "embeddedContext")
+    (:mcp-http :true "mcpCapabilities" "http")
+    (:mcp-sse :true "mcpCapabilities" "sse")
+    (:session-list :object "sessionCapabilities" "list")
+    (:session-delete :object "sessionCapabilities" "delete")
+    (:session-resume :object "sessionCapabilities" "resume")
+    (:session-close :object "sessionCapabilities" "close")
+    (:additional-directories :object "sessionCapabilities" "additionalDirectories")
+    (:system-prompt :object "sessionCapabilities" "systemPrompt")
+    (:logout :object "auth" "logout")))
+
+(assert (null (set-exclusive-or (mapcar #'first +%client-feature-paths+) +acp-client-features+)))
+(assert (null (set-exclusive-or (mapcar #'first +%agent-feature-paths+) +acp-agent-features+)))
+
+(defun %json-path (node keys)
+  (dolist (key keys node)
+    (setf node (and (hash-table-p node) (gethash key node)))))
+
+(defun %supports-p (caps feature rows)
+  (let ((row (assoc feature rows)))
+    (unless row
+      (error 'type-error :datum feature
+                         :expected-type `(member ,@(mapcar #'first rows))))
+    (when (or (hash-table-p caps) (%schema-object-p caps))
+      (destructuring-bind (test &rest keys) (rest row)
+        (if (eq test :any)
+            (some (lambda (f) (%supports-p caps f rows)) keys)
+            (let ((value (%json-path (acp-object-table caps) keys)))
+              (ecase test
+                (:true (eq value t))
+                (:object (hash-table-p value)))))))))
+
 (defun client-supports-p (caps feature)
-  (declare (ignore caps feature))
-  (%acp0-pending 'client-supports-p))
+  (%supports-p caps feature +%client-feature-paths+))
 
 (defun agent-supports-p (caps feature)
-  (declare (ignore caps feature))
-  (%acp0-pending 'agent-supports-p))
+  (%supports-p caps feature +%agent-feature-paths+))
 
 (defun capability-meta (caps key)
-  (declare (ignore caps key))
-  (%acp0-pending 'capability-meta))
+  (let ((meta (cond ((hash-table-p caps) (gethash "_meta" caps))
+                    ((and (%schema-object-p caps)
+                          (slot-exists-p caps 'meta)
+                          (slot-boundp caps 'meta))
+                     (meta caps)))))
+    (if (hash-table-p meta)
+        (gethash key meta)
+        (values nil nil))))
