@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "session/delete",
+  "params": {
+    "sessionId": "sess_abc123def456"
+  }
+}

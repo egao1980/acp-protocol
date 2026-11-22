@@ -1,0 +1,11 @@
+{
+  "id": "terminal-login",
+  "name": "Log in from the terminal",
+  "type": "terminal",
+  "args": [
+    "--login"
+  ],
+  "env": {
+    "ACP_INTERACTIVE_LOGIN": "1"
+  }
+}

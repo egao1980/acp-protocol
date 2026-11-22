@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "session/set_config_option",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "configId": "brave_mode",
+    "type": "boolean",
+    "value": true
+  }
+}

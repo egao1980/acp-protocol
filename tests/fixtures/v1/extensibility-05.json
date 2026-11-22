@@ -1,0 +1,7 @@
+{
+  "jsonrpc": "2.0",
+  "method": "_com.example/file_opened",
+  "params": {
+    "path": "/home/user/project/src/editor.rs"
+  }
+}

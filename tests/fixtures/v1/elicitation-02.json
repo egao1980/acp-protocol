@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 44,
+  "method": "elicitation/create",
+  "params": {
+    "requestId": 12,
+    "mode": "url",
+    "elicitationId": "github-oauth-001",
+    "url": "https://agent.example.com/connect?elicitationId=github-oauth-001",
+    "message": "Please authorize access to your repositories."
+  }
+}

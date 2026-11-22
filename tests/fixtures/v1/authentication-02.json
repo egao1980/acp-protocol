@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": 1,
+    "clientCapabilities": {
+      "auth": {
+        "terminal": true
+      }
+    }
+  }
+}

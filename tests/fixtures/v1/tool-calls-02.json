@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_001",
+      "status": "in_progress",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "type": "text",
+            "text": "Found 3 configuration files..."
+          }
+        }
+      ]
+    }
+  }
+}

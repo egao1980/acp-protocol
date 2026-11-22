@@ -1,0 +1,27 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "plan",
+      "entries": [
+        {
+          "content": "Analyze the existing codebase structure",
+          "priority": "high",
+          "status": "pending"
+        },
+        {
+          "content": "Identify components that need refactoring",
+          "priority": "high",
+          "status": "pending"
+        },
+        {
+          "content": "Create unit tests for critical functions",
+          "priority": "medium",
+          "status": "pending"
+        }
+      ]
+    }
+  }
+}

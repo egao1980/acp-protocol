@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_child_1",
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_001",
+      "title": "Run the integration tests",
+      "kind": "execute",
+      "status": "pending"
+    }
+  }
+}

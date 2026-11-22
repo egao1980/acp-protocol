@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "notice",
+      "severity": "warning",
+      "title": "MCP server unavailable",
+      "description": "Continuing without it."
+    }
+  }
+}

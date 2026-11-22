@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "sessionCapabilities": {
+        "systemPrompt": {
+          "mode": {
+            "override": {}
+          }
+        }
+      }
+    }
+  }
+}

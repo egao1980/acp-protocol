@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_789xyz",
+    "update": {
+      "sessionUpdate": "user_message_chunk",
+      "messageId": "msg_user_8f7a1",
+      "content": {
+        "type": "text",
+        "text": "What's the capital of France?"
+      }
+    }
+  }
+}

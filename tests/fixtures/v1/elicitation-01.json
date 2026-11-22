@@ -1,0 +1,26 @@
+{
+  "jsonrpc": "2.0",
+  "id": 43,
+  "method": "elicitation/create",
+  "params": {
+    "sessionId": "sess_abc123",
+    "mode": "form",
+    "message": "How should I approach this refactoring?",
+    "requestedSchema": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "conservative",
+            "balanced",
+            "aggressive"
+          ]
+        }
+      },
+      "required": [
+        "strategy"
+      ]
+    }
+  }
+}

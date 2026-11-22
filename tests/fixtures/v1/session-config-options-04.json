@@ -1,0 +1,64 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "configOptions": [
+      {
+        "id": "mode",
+        "name": "Session Mode",
+        "description": "Controls how the agent requests permission",
+        "category": "mode",
+        "type": "select",
+        "currentValue": "code",
+        "options": [
+          {
+            "value": "ask",
+            "name": "Ask",
+            "description": "Request permission before making any changes"
+          },
+          {
+            "value": "code",
+            "name": "Code",
+            "description": "Write and modify code with full tool access"
+          }
+        ]
+      },
+      {
+        "id": "model",
+        "name": "Model",
+        "category": "model",
+        "type": "select",
+        "currentValue": "model-1",
+        "options": [
+          {
+            "value": "model-1",
+            "name": "Model 1",
+            "description": "The fastest model"
+          },
+          {
+            "value": "model-2",
+            "name": "Model 2",
+            "description": "The most powerful model"
+          }
+        ]
+      },
+      {
+        "id": "context_size",
+        "name": "Context Size",
+        "category": "model_config",
+        "type": "select",
+        "currentValue": "200k",
+        "options": [
+          {
+            "value": "200k",
+            "name": "200K"
+          },
+          {
+            "value": "1m",
+            "name": "1M"
+          }
+        ]
+      }
+    ]
+  }
+}

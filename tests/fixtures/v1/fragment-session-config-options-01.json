@@ -1,0 +1,7 @@
+{
+  "id": "brave_mode",
+  "name": "Brave Mode",
+  "description": "Skip confirmation prompts and act autonomously",
+  "type": "boolean",
+  "currentValue": true
+}

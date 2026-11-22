@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "session/set_config_option",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "configId": "mode",
+    "value": "code"
+  }
+}

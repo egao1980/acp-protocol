@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "child_session",
+    "update": {
+      "sessionUpdate": "session_message_chunk",
+      "messageId": "received_message_1",
+      "content": {
+        "type": "text",
+        "text": "Please investigate "
+      }
+    }
+  }
+}
