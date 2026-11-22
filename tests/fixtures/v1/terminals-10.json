@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "method": "terminal/release",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "terminalId": "term_xyz789"
+  }
+}

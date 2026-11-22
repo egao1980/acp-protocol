@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "auth": {
+        "logout": {}
+      }
+    },
+    "authMethods": [
+      {
+        "id": "agent-login",
+        "name": "Agent login",
+        "description": "Sign in using the agent's login flow"
+      }
+    ]
+  }
+}

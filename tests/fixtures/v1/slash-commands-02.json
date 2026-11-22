@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "session/prompt",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "prompt": [
+      {
+        "type": "text",
+        "text": "/web agent client protocol"
+      }
+    ]
+  }
+}

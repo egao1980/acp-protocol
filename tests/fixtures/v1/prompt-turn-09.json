@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "compaction_summary_chunk",
+      "compactionId": "cmp_001",
+      "content": {
+        "type": "text",
+        "text": "## Retained context\n\n"
+      }
+    }
+  }
+}

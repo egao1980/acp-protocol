@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "error": {
+    "code": -32002,
+    "message": "Resource not found",
+    "data": {
+      "sessionId": "sess_abc123def456"
+    }
+  }
+}

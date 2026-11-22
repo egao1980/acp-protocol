@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "plan_update",
+      "plan": {
+        "type": "items",
+        "planId": "plan-1",
+        "entries": [
+          {
+            "content": "Analyze the existing codebase structure",
+            "priority": "high",
+            "status": "pending"
+          }
+        ]
+      }
+    }
+  }
+}

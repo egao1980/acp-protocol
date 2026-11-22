@@ -1,0 +1,32 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "plan",
+      "entries": [
+        {
+          "content": "Check for syntax errors",
+          "priority": "high",
+          "status": "pending"
+        },
+        {
+          "content": "Identify potential type issues",
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "content": "Review error handling patterns",
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "content": "Suggest improvements",
+          "priority": "low",
+          "status": "pending"
+        }
+      ]
+    }
+  }
+}

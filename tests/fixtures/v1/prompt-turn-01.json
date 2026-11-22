@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "child_session",
+    "update": {
+      "sessionUpdate": "session_message",
+      "messageId": "received_message_1",
+      "senderSessionId": "parent_session",
+      "recipientSessionId": "child_session"
+    }
+  }
+}

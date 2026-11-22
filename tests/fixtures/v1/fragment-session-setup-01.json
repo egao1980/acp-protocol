@@ -1,0 +1,13 @@
+{
+  "name": "filesystem",
+  "command": "/path/to/mcp-server",
+  "args": [
+    "--stdio"
+  ],
+  "env": [
+    {
+      "name": "API_KEY",
+      "value": "secret123"
+    }
+  ]
+}

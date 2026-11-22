@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_parent",
+    "update": {
+      "sessionUpdate": "subagent_update",
+      "sessionId": "sess_child_1",
+      "title": "Test investigator",
+      "cwd": "/home/user/project/.worktrees/test-investigator",
+      "additionalDirectories": []
+    }
+  }
+}

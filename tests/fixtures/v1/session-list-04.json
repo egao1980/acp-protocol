@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "session_info_update",
+      "title": "Implement user authentication",
+      "_meta": {
+        "tags": [
+          "feature",
+          "auth"
+        ],
+        "priority": "high"
+      }
+    }
+  }
+}

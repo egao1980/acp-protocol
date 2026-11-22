@@ -1,0 +1,25 @@
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "loadSession": true,
+      "promptCapabilities": {
+        "image": true,
+        "audio": true,
+        "embeddedContext": true
+      },
+      "mcpCapabilities": {
+        "http": true,
+        "sse": true
+      }
+    },
+    "agentInfo": {
+      "name": "my-agent",
+      "title": "My Agent",
+      "version": "1.0.0"
+    },
+    "authMethods": []
+  }
+}

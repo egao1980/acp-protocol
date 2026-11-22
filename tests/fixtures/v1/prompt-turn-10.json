@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "compaction_update",
+      "compactionId": "cmp_001",
+      "status": "completed",
+      "summary": [
+        {
+          "type": "text",
+          "text": "## Retained context\n\nThe user is updating the ACP schema."
+        }
+      ]
+    }
+  }
+}

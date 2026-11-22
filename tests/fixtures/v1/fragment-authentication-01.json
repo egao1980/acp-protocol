@@ -1,0 +1,5 @@
+{
+  "id": "agent-login",
+  "name": "Agent login",
+  "description": "Sign in using the agent's login flow"
+}

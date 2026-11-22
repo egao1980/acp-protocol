@@ -1,0 +1,7 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": "def hello_world():\n    print('Hello, world!')\n"
+  }
+}

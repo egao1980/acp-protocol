@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "session/prompt",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "prompt": [
+      {
+        "type": "text",
+        "text": "Hello, world!"
+      }
+    ],
+    "_meta": {
+      "traceparent": "00-80e1afed08e019fc1110464cfa66635c-7a085853722dc6d2-01",
+      "com.example/debugMode": true
+    }
+  }
+}

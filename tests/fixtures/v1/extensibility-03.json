@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "buffers": [
+      {
+        "id": 0,
+        "path": "/home/user/project/src/main.rs"
+      },
+      {
+        "id": 1,
+        "path": "/home/user/project/src/editor.rs"
+      }
+    ]
+  }
+}

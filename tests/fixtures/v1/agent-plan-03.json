@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "plan_update",
+      "plan": {
+        "type": "markdown",
+        "planId": "implementation-plan",
+        "content": "## Steps\n- [ ] Refactor module\n- [ ] Add tests",
+        "path": "/home/user/project/PLAN.md"
+      }
+    }
+  }
+}

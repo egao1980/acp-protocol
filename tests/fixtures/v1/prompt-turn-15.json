@@ -1,0 +1,7 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/cancel",
+  "params": {
+    "sessionId": "sess_abc123def456"
+  }
+}

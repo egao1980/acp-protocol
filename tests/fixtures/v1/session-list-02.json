@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "session/list",
+  "params": {
+    "cwd": "/home/user/project",
+    "cursor": "eyJwYWdlIjogMn0="
+  }
+}

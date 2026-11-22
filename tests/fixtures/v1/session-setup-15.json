@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "session/new",
+  "params": {
+    "cwd": "/home/user/project",
+    "mcpServers": [],
+    "systemPrompt": {
+      "mode": "append",
+      "content": [
+        {
+          "type": "text",
+          "text": "You are a code review specialist. Focus on security issues."
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_abc123def456",
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_001",
+      "title": "Analyzing Python code",
+      "kind": "other",
+      "status": "pending"
+    }
+  }
+}

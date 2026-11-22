@@ -1,0 +1,11 @@
+{
+  "type": "sse",
+  "name": "event-stream",
+  "url": "https://events.example.com/mcp",
+  "headers": [
+    {
+      "name": "X-API-Key",
+      "value": "apikey456"
+    }
+  ]
+}
